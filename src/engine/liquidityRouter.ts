@@ -85,18 +85,20 @@ function feeBpsFromQuote(quote: JupiterQuoteResponse): number | undefined {
     return feeSteps > 0 ? undefined : 0;
 }
 
-async function fetchJson(url: URL, headers: Record<string, string> = {}): Promise<any> {
+export async function fetchJson(url: URL | string, headers: Record<string, string> = {}, options: Partial<RequestInit> = {}): Promise<any> {
     const config = getRuntimeConfig();
     let response: Response;
     try {
         response = await fetch(url, {
             headers,
-            signal: withTimeout(config.integrationRequestTimeoutMs)
+            signal: withTimeout(config.integrationRequestTimeoutMs),
+            ...options
         });
     } catch (error) {
+        const urlObj = typeof url === "string" ? new URL(url) : url;
         const reason = error instanceof Error ? error.message : String(error);
         const cause = error instanceof Error && (error as any).cause ? `; cause=${String((error as any).cause.message ?? (error as any).cause)}` : "";
-        throw new Error(`Provider request failed before response for ${url.hostname}: ${reason}${cause}`);
+        throw new Error(`Provider request failed before response for ${urlObj.hostname}: ${reason}${cause}`);
     }
 
     if (!response.ok) {
@@ -213,7 +215,19 @@ export async function getLiquidityRoutes(input: RouteInput): Promise<LiquiditySn
         throw new Error("At least one live liquidity provider must be enabled");
     }
 
-    const results = await Promise.all(calls);
+    const results = await Promise.all(
+        calls.map(async call => {
+            try {
+                return await call;
+            } catch (error) {
+                if (getRuntimeConfig().strictProviders) {
+                    throw error;
+                }
+                console.error("Provider query failed:", error);
+                return null;
+            }
+        })
+    );
     const routes = results.flatMap(result => Array.isArray(result) ? result : result ? [result] : []);
     if (routes.length === 0) {
         throw new Error("Live liquidity providers returned no executable routes");
@@ -227,4 +241,26 @@ export async function getLiquidityRoutes(input: RouteInput): Promise<LiquiditySn
 
 export function selectBestRoute(routes: LiquiditySnapshot[]): LiquiditySnapshot | null {
     return routes[0] ?? null;
+}
+
+export function routeSatisfiesMinOutputs(route: LiquiditySnapshot, intents: any[]): boolean {
+    const totalIn = intents.reduce((sum, intent) => sum + BigInt(intent.amountIn), 0n);
+    if (totalIn === 0n) return true;
+    try {
+        const quotedOut = BigInt(route.quotedAmountOut);
+        for (const intent of intents) {
+            if (intent.minAmountOut) {
+                const minOut = BigInt(intent.minAmountOut);
+                // Proportional share: (quotedOut * amountIn) / totalIn
+                const allocated = (quotedOut * BigInt(intent.amountIn)) / totalIn;
+                if (allocated < minOut) {
+                    return false;
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error checking minAmountOut constraints:", e);
+        return false;
+    }
+    return true;
 }

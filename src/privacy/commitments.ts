@@ -25,10 +25,18 @@ export function stableHash(value: unknown): string {
         .digest("hex");
 }
 
-export function createIntentCommitment(intent: Omit<TradeIntent, "id" | "intentCommitment" | "status" | "createdAt">): string {
+export function createIntentCommitment(intent: {
+    inputMint: string;
+    outputMint: string;
+    side: string;
+    amountIn: string;
+    minAmountOut?: string | null;
+    maxSlippageBps: number;
+    executionWindowMs: number;
+    routeConstraints: any;
+    blindingFactor: string;
+}): string {
     return stableHash({
-        ownerWallet: intent.ownerWallet,
-        agentId: intent.agentId ?? null,
         inputMint: intent.inputMint,
         outputMint: intent.outputMint,
         side: intent.side,
@@ -37,7 +45,7 @@ export function createIntentCommitment(intent: Omit<TradeIntent, "id" | "intentC
         maxSlippageBps: intent.maxSlippageBps,
         executionWindowMs: intent.executionWindowMs,
         routeConstraints: intent.routeConstraints,
-        signature: intent.signature
+        blindingFactor: intent.blindingFactor
     });
 }
 

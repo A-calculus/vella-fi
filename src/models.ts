@@ -95,6 +95,7 @@ export interface TradeIntent {
     routeConstraints: RouteConstraints;
     status: IntentStatus;
     signature: string;
+    blindingFactor?: string;
     intentCommitment?: string;
     createdAt: string;
     batchId?: number;
@@ -118,6 +119,7 @@ export interface ExecutionBatch {
     txSignature?: string;
     routeHash?: string;
     executionResultHash?: string;
+    quoteLockedUntil?: string | null;
 }
 
 export interface LiquiditySnapshot {

@@ -93,6 +93,7 @@ export function initializeDatabase() {
             intent_commitment TEXT NOT NULL,
             created_at DATETIME NOT NULL,
             batch_id INTEGER,
+            blinding_factor TEXT,
             FOREIGN KEY (batch_id) REFERENCES execution_batches(id)
         );
 
@@ -113,7 +114,8 @@ export function initializeDatabase() {
             actual_slippage_bps INTEGER,
             tx_signature TEXT,
             route_hash TEXT,
-            execution_result_hash TEXT
+            execution_result_hash TEXT,
+            quote_locked_until TEXT
         );
 
         CREATE TABLE IF NOT EXISTS batch_intents (
@@ -169,6 +171,14 @@ export function initializeDatabase() {
             FOREIGN KEY (intent_id) REFERENCES trade_intents(id)
         );
     `);
+
+    // Run migrations to ensure columns exist in existing database files
+    db.exec(`ALTER TABLE trade_intents ADD COLUMN blinding_factor TEXT;`, (err) => {
+        // Ignore duplicate column errors
+    });
+    db.exec(`ALTER TABLE execution_batches ADD COLUMN quote_locked_until TEXT;`, (err) => {
+        // Ignore duplicate column errors
+    });
     
     return db;
 }
@@ -439,7 +449,8 @@ function mapTradeIntent(row: any): TradeIntent {
         signature: row.signature,
         intentCommitment: row.intent_commitment,
         createdAt: row.created_at,
-        batchId: row.batch_id ?? undefined
+        batchId: row.batch_id ?? undefined,
+        blindingFactor: row.blinding_factor ?? undefined
     };
 }
 
@@ -461,7 +472,8 @@ function mapExecutionBatch(row: any): ExecutionBatch {
         actualSlippageBps: row.actual_slippage_bps ?? undefined,
         txSignature: row.tx_signature ?? undefined,
         routeHash: row.route_hash ?? undefined,
-        executionResultHash: row.execution_result_hash ?? undefined
+        executionResultHash: row.execution_result_hash ?? undefined,
+        quoteLockedUntil: row.quote_locked_until ?? undefined
     };
 }
 
@@ -504,8 +516,8 @@ export function insertTradeIntent(intent: TradeIntent, callback: (id: number) =>
         `INSERT INTO trade_intents (
             owner_wallet, agent_id, input_mint, output_mint, side, amount_in,
             min_amount_out, max_slippage_bps, execution_window_ms, route_constraints,
-            status, signature, intent_commitment, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            status, signature, intent_commitment, created_at, blinding_factor
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             intent.ownerWallet,
             intent.agentId ?? null,
@@ -520,7 +532,8 @@ export function insertTradeIntent(intent: TradeIntent, callback: (id: number) =>
             intent.status,
             intent.signature,
             intent.intentCommitment,
-            intent.createdAt
+            intent.createdAt,
+            intent.blindingFactor ?? null
         ],
         function(this: sqlite3.RunResult, err: Error | null) {
             if (err) {
@@ -577,8 +590,8 @@ export function createExecutionBatch(batch: ExecutionBatch, intents: TradeIntent
     db.run(
         `INSERT INTO execution_batches (
             input_mint, output_mint, total_amount_in, intent_count,
-            aggregation_window_started_at, aggregation_window_closed_at, status, commitment_root
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            aggregation_window_started_at, aggregation_window_closed_at, status, commitment_root, quote_locked_until
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             batch.inputMint,
             batch.outputMint,
@@ -587,7 +600,8 @@ export function createExecutionBatch(batch: ExecutionBatch, intents: TradeIntent
             batch.aggregationWindowStartedAt,
             batch.aggregationWindowClosedAt ?? null,
             batch.status,
-            batch.commitmentRoot
+            batch.commitmentRoot,
+            batch.quoteLockedUntil ?? null
         ],
         function(this: sqlite3.RunResult, err: Error | null) {
             if (err) {
@@ -693,15 +707,28 @@ export function getLiquiditySnapshots(inputMint: string | undefined, outputMint:
     });
 }
 
-export function updateExecutionBatchAfterQuote(batchId: number, route: LiquiditySnapshot, routeHash: string, callback?: (err: Error | null) => void): void {
+export function updateExecutionBatchAfterQuote(
+    batchId: number,
+    route: LiquiditySnapshot,
+    routeHash: string,
+    quoteLockedUntil?: string | null | ((err: Error | null) => void),
+    callback?: (err: Error | null) => void
+): void {
+    let actualLocked: string | null = null;
+    let actualCallback = callback;
+    if (typeof quoteLockedUntil === "function") {
+        actualCallback = quoteLockedUntil;
+    } else if (quoteLockedUntil !== undefined) {
+        actualLocked = quoteLockedUntil;
+    }
     db.run(
         `UPDATE execution_batches
          SET status = CASE WHEN status = 'settled' THEN status ELSE 'quoted' END,
              selected_route_id = ?, expected_amount_out = ?,
-             expected_slippage_bps = ?, route_hash = ?
+             expected_slippage_bps = ?, route_hash = ?, quote_locked_until = ?
          WHERE id = ?`,
-        [route.poolOrRouteId, route.quotedAmountOut, Math.round(route.priceImpactPct * 100), routeHash, batchId],
-        (err: Error | null) => callback?.(err)
+        [route.poolOrRouteId, route.quotedAmountOut, Math.round(route.priceImpactPct * 100), routeHash, actualLocked, batchId],
+        (err: Error | null) => actualCallback?.(err)
     );
 }
 

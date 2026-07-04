@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vella Finance | Private Intent & Routing Layer</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS (via CDN for fast prototyping) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Solana Web3.js (via CDN for signing) -->
+    <script src="https://unpkg.com/@solana/web3.js@1.95.2/lib/index.iife.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        vella: {
+                            bg: '#030712',
+                            primary: '#6366f1',
+                            secondary: '#a855f7',
+                            accent: '#3b82f6',
+                            card: 'rgba(17, 24, 39, 0.7)',
+                            border: 'rgba(255, 255, 255, 0.08)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #030712;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glow-button {
+            transition: all 0.3s ease;
+        }
+        .glow-button:hover {
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="text-gray-200 min-h-screen font-sans flex flex-col">
+    <!-- Header -->
+    <header class="border-b border-white/5 py-4 px-6 md:px-12 flex justify-between items-center glass-panel sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-vella-primary to-vella-secondary flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-indigo-500/20">V</div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white flex items-center">
+                    Vella Finance 
+                    <span class="ml-2 text-[10px] uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded tracking-widest font-mono">MVP</span>
+                </h1>
+                <p class="text-xs text-gray-400">Private Intent & Routing Layer</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="flex items-center text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2.5 py-1 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
+                Node Connected
+            </span>
+        </div>
+    </header>
+
+    <main class="flex-grow p-4 md:p-8 max-w-[1600px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left Panel: Key manager & Form -->
+        <div class="lg:col-span-4 flex flex-col space-y-6">
+            <!-- Mock Wallet Manager -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
+                <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                    <h2 class="font-semibold text-white tracking-wide flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                        Solana Mock Wallet
+                    </h2>
+                    <button onclick="generateNewKeypair()" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium transition">
+                        Generate New
+                    </button>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Public Key</label>
+                        <div class="font-mono text-xs bg-black/40 border border-white/5 rounded-lg p-2.5 break-all text-indigo-300 select-all" id="wallet-pubkey">
+                            Loading...
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Secret Key (Simulated)</label>
+                        <div class="font-mono text-xs bg-black/40 border border-white/5 rounded-lg p-2.5 truncate text-gray-500 select-none" id="wallet-seckey">
+                            Loading...
+                        </div>
+                    </div>
+                    <div class="text-[11px] text-gray-400 italic">
+                        * Used to cryptographically sign transaction intents locally in browser using Ed25519.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Intent -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
+                <h2 class="font-semibold text-white tracking-wide border-b border-white/5 pb-3 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Create Trade Intent
+                </h2>
+                <form id="intent-form" onsubmit="submitIntent(event)" class="space-y-4">
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Input Token Mint</label>
+                        <select id="input-mint" class="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 font-mono">
+                            <option value="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v">USDC (EPjFWdd5...G4wEGGkZ)</option>
+                            <option value="So11111111111111111111111111111111111111112">SOL (So111111...11111112)</option>
+                            <option value="Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB">USDT (Es9vMFrz...BenwNYB)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Output Token Mint</label>
+                        <select id="output-mint" class="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 font-mono">
+                            <option value="So11111111111111111111111111111111111111112">SOL (So111111...11111112)</option>
+                            <option value="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v">USDC (EPjFWdd5...G4wEGGkZ)</option>
+                            <option value="Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB">USDT (Es9vMFrz...BenwNYB)</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Amount In (Raw Units)</label>
+                            <input type="text" id="amount-in" value="1000000" class="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-sm font-mono text-gray-300 focus:outline-none focus:border-indigo-500" placeholder="e.g. 1000000">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Max Slippage (Bps)</label>
+                            <input type="number" id="slippage" value="100" class="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-sm text-gray-300 focus:outline-none focus:border-indigo-500" placeholder="100">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Min Amount Out</label>
+                            <input type="text" id="min-out" value="" class="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-sm font-mono text-gray-300 focus:outline-none focus:border-indigo-500" placeholder="Optional">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Blinding Factor (Salt)</label>
+                            <div class="relative">
+                                <input type="text" id="blinding" readonly class="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-xs font-mono text-gray-400 focus:outline-none select-none">
+                                <button type="button" onclick="regenerateBlinding()" class="absolute right-2.5 top-2.5 text-[10px] text-indigo-400 hover:text-indigo-300 font-medium">Gen</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="w-full glow-button bg-gradient-to-r from-vella-primary to-vella-secondary text-white font-medium py-3 px-4 rounded-xl text-sm flex items-center justify-center space-x-2">
+                        <span>Sign & Submit Trade Intent</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Right Panel: Intents, Batches, Settlements -->
+        <div class="lg:col-span-8 flex flex-col space-y-6">
+            <!-- Batches and Routing orchestrator -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
+                <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                    <h2 class="font-semibold text-white tracking-wide flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        Aggregation Orchestrator
+                    </h2>
+                    <button onclick="aggregatePendingIntents()" class="glow-button bg-indigo-600 hover:bg-indigo-500 text-xs text-white px-4 py-2 rounded-lg font-medium transition flex items-center">
+                        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.5"></path></svg>
+                        Aggregate Pending Intents
+                    </button>
+                </div>
+
+                <!-- Active Formed Batches -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="border-b border-white/5 text-gray-400 font-medium">
+                                <th class="py-2.5">ID</th>
+                                <th class="py-2.5">Mints</th>
+                                <th class="py-2.5">Total In</th>
+                                <th class="py-2.5">Intents</th>
+                                <th class="py-2.5">Status</th>
+                                <th class="py-2.5">Lock Expiry</th>
+                                <th class="py-2.5 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batches-tbody">
+                            <tr>
+                                <td colspan="7" class="py-4 text-center text-gray-500">No active execution batches. Click 'Aggregate Pending Intents' above.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Trade Intents List -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col space-y-4">
+                <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                    <h2 class="font-semibold text-white tracking-wide flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                        Private Trade Intents
+                    </h2>
+                    <button onclick="refreshIntents()" class="text-xs text-gray-400 hover:text-gray-300">Refresh</button>
+                </div>
+                <div class="overflow-x-auto max-h-[250px]">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="border-b border-white/5 text-gray-400 font-medium">
+                                <th class="py-2.5">ID</th>
+                                <th class="py-2.5">Owner Wallet</th>
+                                <th class="py-2.5">Direction</th>
+                                <th class="py-2.5">Amount In</th>
+                                <th class="py-2.5">Privacy Commitment (Hash)</th>
+                                <th class="py-2.5">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="intents-tbody">
+                            <tr>
+                                <td colspan="6" class="py-4 text-center text-gray-500">No intents found. Create one on the left.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Console Log -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col space-y-3">
+                <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                    <h2 class="font-semibold text-xs uppercase tracking-wider text-indigo-400 flex items-center">
+                        <span class="w-2 h-2 bg-indigo-500 rounded-full mr-2 animate-ping"></span>
+                        Vella Node Engine Console
+                    </h2>
+                    <button onclick="clearConsole()" class="text-[10px] text-gray-500 hover:text-gray-400">Clear</button>
+                </div>
+                <div id="console" class="font-mono text-[11px] text-emerald-400 bg-black/60 rounded-xl p-4 h-[180px] overflow-y-auto space-y-1.5 border border-white/5 select-all">
+                    <div>[SYSTEM] Vella Node Engine dashboard initialized. Ready for operations.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for details -->
+    <div id="modal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 hidden p-4">
+        <div class="glass-panel rounded-2xl max-w-3xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                <h3 class="font-semibold text-white text-lg" id="modal-title">Batch Settled Details</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div class="space-y-4 text-sm" id="modal-content">
+                <!-- Dynamic Content -->
+            </div>
+            <div class="flex justify-end pt-3 border-t border-white/5">
+                <button onclick="closeModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-lg font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-4 text-center text-xs text-gray-500 border-t border-white/5">
+        &copy; 2026 Vella Finance. Built for secure, private intent aggregation and optimal Solana routing.
+    </footer>
+
+    <!-- Main Logic Script -->
+    <script>
+        let localKeypair = null;
+        let lockIntervals = {};
+
+        window.onload = async () => {
+            generateNewKeypair();
+            regenerateBlinding();
+            await refreshIntents();
+            await refreshBatches();
+            setInterval(refreshBatches, 5000);
+        };
+
+        function generateNewKeypair() {
+            try {
+                const kp = solanaWeb3.Keypair.generate();
+                localKeypair = kp;
+                document.getElementById('wallet-pubkey').innerText = kp.publicKey.toBase58();
+                
+                // Show raw secret key array preview
+                const secretArrStr = JSON.stringify(Array.from(kp.secretKey.slice(0, 16))) + "...";
+                document.getElementById('wallet-seckey').innerText = secretArrStr;
+                logConsole(`[KEYPAIR] Generated new local signer: ${kp.publicKey.toBase58()}`);
+            } catch (e) {
+                console.error(e);
+                logConsole(`[ERROR] Failed to generate Solana keypair: ${e.message}`);
+            }
+        }
+
+        function regenerateBlinding() {
+            const bytes = new Uint8Array(16);
+            window.crypto.getRandomValues(bytes);
+            const blindingHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            document.getElementById('blinding').value = blindingHex;
+        }
+
+        function logConsole(message) {
+            const consoleDiv = document.getElementById('console');
+            const newLog = document.createElement('div');
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, 8);
+            newLog.innerText = `[${timestamp}] ${message}`;
+            consoleDiv.appendChild(newLog);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '<div>[SYSTEM] Console cleared.</div>';
+        }
+
+        async function refreshIntents() {
+            try {
+                const res = await fetch('/api/intents');
+                const data = await res.json();
+                const tbody = document.getElementById('intents-tbody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-gray-500">No intents found. Create one on the left.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = data.map(intent => {
+                    const statusClass = intent.status === 'pending' ? 'text-amber-400 bg-amber-400/10' : 'text-emerald-400 bg-emerald-400/10';
+                    return `
+                        <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                            <td class="py-3 font-mono text-[11px] text-gray-400">${intent.id}</td>
+                            <td class="py-3 font-mono text-[11px] text-gray-400 select-all" title="${intent.ownerWallet}">${intent.ownerWallet.slice(0, 6)}...${intent.ownerWallet.slice(-6)}</td>
+                            <td class="py-3 text-indigo-300 font-medium font-mono uppercase">${intent.side} (${intent.inputMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC' : 'SOL'} → ${intent.outputMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC' : 'SOL'})</td>
+                            <td class="py-3 font-mono text-gray-300">${intent.amountIn}</td>
+                            <td class="py-3 font-mono text-[11px] text-indigo-400 select-all" title="${intent.intentCommitment}">${intent.intentCommitment ? intent.intentCommitment.slice(0, 24) + '...' : 'N/A'}</td>
+                            <td class="py-3"><span class="px-2 py-0.5 rounded text-[10px] ${statusClass}">${intent.status}</span></td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+                logConsole(`[ERROR] Failed to fetch intents: ${e.message}`);
+            }
+        }
+
+        async function refreshBatches() {
+            try {
+                const res = await fetch('/api/execution-batches');
+                const data = await res.json();
+                const tbody = document.getElementById('batches-tbody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" class="py-4 text-center text-gray-500">No active execution batches. Click 'Aggregate Pending Intents' above.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = data.map(batch => {
+                    let statusClass = 'text-gray-400 bg-gray-400/10';
+                    if (batch.status === 'quoted') statusClass = 'text-blue-400 bg-blue-400/10';
+                    if (batch.status === 'settled') statusClass = 'text-emerald-400 bg-emerald-400/10 animate-pulse';
+
+                    let actionsHtml = '';
+                    if (batch.status === 'forming') {
+                        actionsHtml = `
+                            <button onclick="getBatchQuote(${batch.id})" class="bg-blue-600 hover:bg-blue-500 text-[10px] text-white px-2 py-1 rounded font-medium transition mr-1">Quote</button>
+                        `;
+                    } else if (batch.status === 'quoted') {
+                        actionsHtml = `
+                            <button onclick="getBatchQuote(${batch.id})" class="bg-blue-600/30 hover:bg-blue-500/50 text-[10px] text-blue-300 px-2 py-1 rounded font-medium transition mr-1">Re-Quote</button>
+                            <button onclick="executeBatch(${batch.id})" class="bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white px-2 py-1 rounded font-medium transition">Execute</button>
+                        `;
+                    } else if (batch.status === 'settled') {
+                        actionsHtml = `
+                            <button onclick="viewBatchDetails(${batch.id})" class="bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white px-2 py-1 rounded font-medium transition">View Details</button>
+                        `;
+                    }
+
+                    // Countdown lock display
+                    let lockDisplay = 'N/A';
+                    if (batch.quoteLockedUntil) {
+                        const secondsLeft = Math.max(0, Math.round((new Date(batch.quoteLockedUntil).getTime() - Date.now()) / 1000));
+                        if (secondsLeft > 0) {
+                            lockDisplay = `<span class="text-amber-400 font-mono font-medium">${secondsLeft}s left</span>`;
+                            startLocalLockTimer(batch.id, batch.quoteLockedUntil);
+                        } else {
+                            lockDisplay = '<span class="text-red-400 font-mono">Expired</span>';
+                        }
+                    }
+
+                    return `
+                        <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                            <td class="py-3 font-mono text-[11px] text-indigo-400">${batch.id}</td>
+                            <td class="py-3 font-mono text-[11px] text-gray-300 uppercase">${batch.inputMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC' : 'SOL'} → ${batch.outputMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC' : 'SOL'}</td>
+                            <td class="py-3 font-mono text-gray-300">${batch.totalAmountIn}</td>
+                            <td class="py-3 font-mono text-gray-300">${batch.intentCount}</td>
+                            <td class="py-3"><span class="px-2 py-0.5 rounded text-[10px] ${statusClass}">${batch.status}</span></td>
+                            <td class="py-3" id="lock-timer-${batch.id}">${lockDisplay}</td>
+                            <td class="py-3 text-right">${actionsHtml}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function startLocalLockTimer(batchId, quoteLockedUntil) {
+            if (lockIntervals[batchId]) return; // Timer already active
+            
+            const timerEl = document.getElementById(`lock-timer-${batchId}`);
+            lockIntervals[batchId] = setInterval(() => {
+                const secondsLeft = Math.max(0, Math.round((new Date(quoteLockedUntil).getTime() - Date.now()) / 1000));
+                const currentEl = document.getElementById(`lock-timer-${batchId}`);
+                
+                if (!currentEl) {
+                    clearInterval(lockIntervals[batchId]);
+                    delete lockIntervals[batchId];
+                    return;
+                }
+
+                if (secondsLeft > 0) {
+                    currentEl.innerHTML = `<span class="text-amber-400 font-mono font-medium">${secondsLeft}s left</span>`;
+                } else {
+                    currentEl.innerHTML = '<span class="text-red-400 font-mono">Expired</span>';
+                    clearInterval(lockIntervals[batchId]);
+                    delete lockIntervals[batchId];
+                }
+            }, 1000);
+        }
+
+        async function submitIntent(event) {
+            event.preventDefault();
+            if (!localKeypair) {
+                alert("Please generate a keypair first!");
+                return;
+            }
+
+            const ownerWallet = localKeypair.publicKey.toBase58();
+            const inputMint = document.getElementById('input-mint').value;
+            const outputMint = document.getElementById('output-mint').value;
+            const amountIn = document.getElementById('amount-in').value;
+            const maxSlippageBps = Number(document.getElementById('slippage').value);
+            const minAmountOut = document.getElementById('min-out').value || undefined;
+            const blindingFactor = document.getElementById('blinding').value;
+            const side = "swap";
+
+            // Construct the message to sign
+            const message = `Vella Intent: ownerWallet=${ownerWallet}, inputMint=${inputMint}, outputMint=${outputMint}, amountIn=${amountIn}, side=${side}, maxSlippageBps=${maxSlippageBps}, blindingFactor=${blindingFactor}`;
+            
+            logConsole(`[SIGNING] Signing message: "${message}"`);
+            
+            // Sign the message cryptographically
+            const encoder = new TextEncoder();
+            const messageBytes = encoder.encode(message);
+            const signatureBytes = nacl.sign.detached(messageBytes, localKeypair.secretKey);
+            
+            // Base58 Encode the signature bytes
+            const signature = base58Encode(signatureBytes);
+            
+            logConsole(`[SIGNING] Produced signature: ${signature.slice(0, 16)}...`);
+
+            try {
+                const res = await fetch('/api/intents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ownerWallet,
+                        inputMint,
+                        outputMint,
+                        side,
+                        amountIn,
+                        maxSlippageBps,
+                        minAmountOut,
+                        blindingFactor,
+                        signature
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    logConsole(`[SUCCESS] Intent submitted! Public Hash: ${data.intentCommitment}`);
+                    regenerateBlinding();
+                    await refreshIntents();
+                } else {
+                    logConsole(`[ERROR] Server rejected intent: ${data.error}`);
+                }
+            } catch (e) {
+                logConsole(`[ERROR] HTTP post failed: ${e.message}`);
+            }
+        }
+
+        async function aggregatePendingIntents() {
+            logConsole(`[ORCHESTRATOR] Triggering batch forming for pending intents...`);
+            try {
+                const res = await fetch('/api/batches/aggregate', { method: 'POST' });
+                const data = await res.json();
+                if (data.created && data.created.length > 0) {
+                    logConsole(`[SUCCESS] Aggregated intents into ${data.created.length} new batch(es).`);
+                } else {
+                    logConsole(`[ORCHESTRATOR] No forming batches were created: ${data.message || 'all intents already batched'}`);
+                }
+                await refreshBatches();
+                await refreshIntents();
+            } catch (e) {
+                logConsole(`[ERROR] Batch aggregation failed: ${e.message}`);
+            }
+        }
+
+        async function getBatchQuote(batchId) {
+            logConsole(`[ROUTER] Fetching liquidity quotes for batch ID ${batchId}...`);
+            try {
+                const res = await fetch(`/api/execution-batches/${batchId}/quote`, { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    logConsole(`[SUCCESS] Quoted successfully. Route ID: ${data.selectedRoute.poolOrRouteId} via ${data.selectedRoute.source}. Expected Out: ${data.selectedRoute.quotedAmountOut}. Lock starts now.`);
+                    await refreshBatches();
+                } else {
+                    logConsole(`[ERROR] Quote failed: ${data.error}`);
+                }
+            } catch (e) {
+                logConsole(`[ERROR] Quote fetch failed: ${e.message}`);
+            }
+        }
+
+        async function executeBatch(batchId) {
+            logConsole(`[EXECUTOR] Construction & Settlement triggered for batch ID ${batchId}...`);
+            try {
+                const res = await fetch(`/api/execution-batches/${batchId}/execute`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userPublicKey: localKeypair.publicKey.toBase58() })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    logConsole(`[SUCCESS] Settled Batch ${batchId}! Signature: ${data.txSignature.slice(0, 24)}...`);
+                    if (data.swapTransaction) {
+                        logConsole(`[JUPITER] Real Swap Tx Constructed! serialized length = ${data.swapTransaction.length} bytes.`);
+                    }
+                    await refreshBatches();
+                    await refreshIntents();
+                    showBatchSettlementModal(data);
+                } else {
+                    logConsole(`[ERROR] Execution failed: ${data.error}`);
+                }
+            } catch (e) {
+                logConsole(`[ERROR] Execution post failed: ${e.message}`);
+            }
+        }
+
+        function showBatchSettlementModal(data) {
+            const modal = document.getElementById('modal');
+            const title = document.getElementById('modal-title');
+            const content = document.getElementById('modal-content');
+
+            title.innerText = `Batch ${data.batchId} Settled Successfully`;
+            
+            let allocationsHtml = data.allocations.map(a => `
+                <div class="bg-black/30 border border-white/5 rounded-lg p-3 space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-400">Wallet:</span>
+                        <span class="font-mono text-indigo-300 select-all">${a.ownerWallet}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-400">Proportional Share:</span>
+                        <span class="font-mono">${(a.allocationBps / 100).toFixed(2)}%</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-400">Amount In:</span>
+                        <span class="font-mono">${a.amountIn}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-400">Filled Out:</span>
+                        <span class="font-mono text-emerald-400">${a.actualAmountOut}</span>
+                    </div>
+                    <div class="flex justify-between text-xs pt-1 border-t border-white/5">
+                        <span class="text-gray-400">Proof Hash:</span>
+                        <span class="font-mono text-[10px] text-gray-500 select-all">${a.proofLeaf}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <h4 class="font-semibold text-white border-b border-indigo-500/20 pb-1">On-Chain Evidence</h4>
+                        <div class="text-xs space-y-2">
+                            <div>
+                                <span class="text-gray-400 block">Commitment Root Hash:</span>
+                                <span class="font-mono text-indigo-300 break-all select-all">${data.privacy.commitmentRoot}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block">Solana Settlement Signature:</span>
+                                <span class="font-mono text-emerald-400 break-all select-all">${data.txSignature}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block">Routing Verification Proof Hash:</span>
+                                <span class="font-mono text-indigo-400 break-all select-all">${data.executionResultHash}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <h4 class="font-semibold text-white border-b border-indigo-500/20 pb-1">Jupiter Routing Construction</h4>
+                        <div class="text-xs space-y-2">
+                            <div>
+                                <span class="text-gray-400 block">Execution Mode:</span>
+                                <span class="font-semibold text-indigo-300">${data.mode}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block">Selected Route:</span>
+                                <span class="font-mono">${data.selectedRoute.poolOrRouteId} via ${data.selectedRoute.source}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block">Swap Transaction (Base64 Serialized):</span>
+                                <textarea readonly class="w-full bg-black/40 border border-white/10 rounded-lg p-1.5 font-mono text-[10px] h-20 text-gray-400 focus:outline-none select-all">${data.swapTransaction || 'N/A'}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <h4 class="font-semibold text-white border-b border-indigo-500/20 pb-1">Intent Allocations (Fills)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        ${allocationsHtml}
+                    </div>
+                </div>
+            `;
+
+            modal.classList.remove('hidden');
+        }
+
+        async function viewBatchDetails(batchId) {
+            try {
+                const res = await fetch(`/api/execution-batches/${batchId}`);
+                const data = await res.json();
+                showBatchSettlementModal(data);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        // Base58 encoder for browser signature
+        const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        function base58Encode(buffer) {
+            let carry;
+            let digits = [0];
+            for (let i = 0; i < buffer.length; i++) {
+                carry = buffer[i];
+                for (let j = 0; j < digits.length; j++) {
+                    carry += digits[j] << 8;
+                    digits[j] = carry % 58;
+                    carry = (carry / 58) | 0;
+                }
+                while (carry > 0) {
+                    digits.push(carry % 58);
+                    carry = (carry / 58) | 0;
+                }
+            }
+            for (let i = 0; i < buffer.length && buffer[i] === 0; i++) {
+                digits.push(0);
+            }
+            return digits.reverse().map(digit => BASE58_ALPHABET[digit]).join('');
+        }
+    </script>
+</body>
+</html>

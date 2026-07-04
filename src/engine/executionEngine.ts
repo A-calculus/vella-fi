@@ -2,6 +2,8 @@
 
 import { BatchAllocation, ExecutionBatch, LiquiditySnapshot, TradeIntent } from "../models.js";
 import { createExecutionResultHash, stableHash } from "../privacy/commitments.js";
+import { getRuntimeConfig } from "../config.js";
+import { fetchJson } from "./liquidityRouter.js";
 
 export function simulateBatchExecution(batch: ExecutionBatch, route: LiquiditySnapshot): {
     actualAmountOut: string;
@@ -58,3 +60,43 @@ export function allocateBatchFills(batchId: number, intents: TradeIntent[], expe
         };
     });
 }
+
+export async function constructJupiterSwapTransaction(params: {
+    inputMint: string;
+    outputMint: string;
+    amountIn: string;
+    maxSlippageBps: number;
+    userPublicKey: string;
+}): Promise<{ swapTransaction: string; lastValidBlockHeight: number; quoteResponse: any }> {
+    const config = getRuntimeConfig();
+    const quoteUrl = `${config.jupiterApiBaseUrl.replace(/\/$/, "")}/quote?inputMint=${params.inputMint}&outputMint=${params.outputMint}&amount=${params.amountIn}&slippageBps=${params.maxSlippageBps}`;
+
+    const headers: Record<string, string> = {};
+    if (config.jupiterApiKey) {
+        headers["x-api-key"] = config.jupiterApiKey;
+    }
+
+    const quoteResponse = await fetchJson(quoteUrl, headers);
+    const swapUrl = `${config.jupiterApiBaseUrl.replace(/\/$/, "")}/swap`;
+
+    const swapBody = {
+        quoteResponse,
+        userPublicKey: params.userPublicKey,
+        wrapAndUnwrapSol: true
+    };
+
+    const swapResponse = await fetchJson(swapUrl, {
+        ...headers,
+        "content-type": "application/json"
+    }, {
+        method: "POST",
+        body: JSON.stringify(swapBody)
+    });
+
+    return {
+        swapTransaction: swapResponse.swapTransaction,
+        lastValidBlockHeight: swapResponse.lastValidBlockHeight ?? 0,
+        quoteResponse
+    };
+}
+

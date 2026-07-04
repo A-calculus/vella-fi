@@ -4,6 +4,7 @@ import { Router } from "express";
 import { createIntentCommitment } from "../privacy/commitments.js";
 import { insertTradeIntent, getTradeIntents, getTradeIntent } from "../db/schema.js";
 import { RouteConstraints, TradeIntent } from "../models.js";
+import { verifyIntentSignature } from "../utils/cryptoUtils.js";
 
 const router = Router();
 
@@ -32,12 +33,13 @@ router.post("/intents", (req, res) => {
         maxSlippageBps,
         executionWindowMs = 30000,
         routeConstraints,
-        signature
+        signature,
+        blindingFactor
     } = req.body;
 
-    if (!ownerWallet || !inputMint || !outputMint || !amountIn || !signature) {
+    if (!ownerWallet || !inputMint || !outputMint || !amountIn || !signature || !blindingFactor) {
         return res.status(400).json({
-            error: "ownerWallet, inputMint, outputMint, amountIn, and signature are required"
+            error: "ownerWallet, inputMint, outputMint, amountIn, signature, and blindingFactor are required"
         });
     }
 
@@ -64,8 +66,15 @@ router.post("/intents", (req, res) => {
         maxSlippageBps: Number(maxSlippageBps ?? 100),
         executionWindowMs: Number(executionWindowMs),
         routeConstraints: defaultRouteConstraints(routeConstraints),
-        signature
+        signature,
+        blindingFactor: String(blindingFactor)
     };
+
+    // Verify cryptographic signature
+    const isValid = verifyIntentSignature(normalizedIntent);
+    if (!isValid) {
+        return res.status(400).json({ error: "Invalid cryptographic signature for owner wallet" });
+    }
 
     const intent: TradeIntent = {
         ...normalizedIntent,
@@ -80,12 +89,13 @@ router.post("/intents", (req, res) => {
                 ...createdIntent,
                 privacy: {
                     publicCommitment: createdIntent?.intentCommitment,
-                    note: "Raw intent details are wallet-scoped; public batch records expose commitments only."
+                    note: "Raw intent details are wallet-scoped; public batch records expose commitments only. Called: wallet-scoped intent prototype."
                 }
             });
         });
     });
 });
+
 
 router.get("/intents", (req, res) => {
     const ownerWallet = typeof req.query.ownerWallet === "string" ? req.query.ownerWallet : undefined;

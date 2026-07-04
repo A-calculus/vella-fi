@@ -3,6 +3,7 @@
 import { Router } from "express";
 import { createAgentPermission, getAgentPermissions, updateAgentPermissionStatus } from "../db/schema.js";
 import { AgentPermission } from "../models.js";
+import { verifyAgentPermissionSignature } from "../utils/cryptoUtils.js";
 
 const router = Router();
 
@@ -40,6 +41,14 @@ router.post("/agents/permissions", (req, res) => {
         status: "active",
         createdAt: new Date().toISOString()
     };
+
+    // Verify cryptographic signature
+    const isValid = verifyAgentPermissionSignature(permission);
+    if (!isValid) {
+        return res.status(400).json({
+            error: "Invalid cryptographic signature for owner wallet agent permission"
+        });
+    }
 
     createAgentPermission(permission, (id) => {
         res.status(201).json({ ...permission, id });

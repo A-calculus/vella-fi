@@ -2,6 +2,7 @@
 
 import express from "express";
 import bodyParser from "body-parser";
+import path from "path";
 import agentRoutes from "./routes/agentRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import batchRoutes from "./routes/batchRoutes.js";
@@ -26,6 +27,7 @@ try {
 
 // Middleware
 app.use(bodyParser.json());
+app.use(express.static(path.resolve(process.cwd(), "public")));
 
 // Initialize database
 initializeDatabase();

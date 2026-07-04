@@ -9,6 +9,7 @@ export type RuntimeConfig = {
     raydiumApiBaseUrl: string;
     raydiumSwapApiBaseUrl: string;
     integrationRequestTimeoutMs: number;
+    strictProviders: boolean;
 };
 
 function stripQuotes(value: string): string {
@@ -58,7 +59,8 @@ export function getRuntimeConfig(): RuntimeConfig {
         jupiterApiKey: process.env.JUPITER_API_KEY?.trim() || requiredEnv("JUPITER_API_KEY"),
         raydiumApiBaseUrl: process.env.RAYDIUM_API_BASE_URL?.trim() || "https://api-v3.raydium.io",
         raydiumSwapApiBaseUrl: process.env.RAYDIUM_SWAP_API_BASE_URL?.trim() || "https://transaction-v1.raydium.io",
-        integrationRequestTimeoutMs: Number(process.env.INTEGRATION_REQUEST_TIMEOUT_MS || 10000)
+        integrationRequestTimeoutMs: Number(process.env.INTEGRATION_REQUEST_TIMEOUT_MS || 10000),
+        strictProviders: process.env.STRICT_PROVIDERS === "true"
     };
 }
 

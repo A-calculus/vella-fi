@@ -11,15 +11,18 @@ const router = Router();
  * POST /api/settlement/submit-result - Submit a signed batch result for on-chain settlement
  */
 router.post("/settlement/submit-result", async (req, res) => {
+    res.setHeader("Warning", '299 - "This endpoint is deprecated. Settlement is now handled automatically in the new execution batch flow."');
     try {
         const { batchId, authoritySecret, treasuryWallet } = req.body;
         
         // Validate input
         if (!batchId || !authoritySecret || !treasuryWallet) {
             return res.status(400).json({
-                error: "batchId, authoritySecret, and treasuryWallet are required"
+                error: "batchId, authoritySecret, and treasuryWallet are required",
+                warning: "This endpoint is deprecated. Settlement is now handled automatically in the new execution batch flow."
             });
         }
+
         
         // Get the trade batch from database
         getTradeBatch(batchId, async (batch) => {
@@ -109,7 +112,8 @@ router.post("/settlement/submit-result", async (req, res) => {
                 batchId: batchId,
                 winner: winner,
                 loser: loser,
-                amount: totalAmount
+                amount: totalAmount,
+                warning: "This endpoint is deprecated. Settlement is now handled automatically in the new execution batch flow."
             });
         });
         

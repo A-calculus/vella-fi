@@ -64,7 +64,8 @@ router.post("/batches", (req, res) => {
                         // No matches, update batch status and return
                         updateTradeBatchStatus(batchId, 'pending', () => {
                             getTradeBatch(batchId, (batch) => {
-                                res.status(201).json(batch);
+                                res.setHeader("Warning", '299 - "This endpoint is deprecated. Use execution batches instead."');
+                                res.status(201).json({ ...batch, warning: "This endpoint is deprecated. Use the execution batch flow instead." });
                             });
                         });
                     } else {
@@ -76,7 +77,8 @@ router.post("/batches", (req, res) => {
                                 if (pairsProcessed === matchedPairs.length) {
                                     updateTradeBatchStatus(batchId, 'matched', () => {
                                         getTradeBatch(batchId, (batch) => {
-                                            res.status(201).json(batch);
+                                            res.setHeader("Warning", '299 - "This endpoint is deprecated. Use execution batches instead."');
+                                            res.status(201).json({ ...batch, warning: "This endpoint is deprecated. Use the execution batch flow instead." });
                                         });
                                     });
                                 }
@@ -89,14 +91,20 @@ router.post("/batches", (req, res) => {
     });
 });
 
+
 /**
  * GET /api/batches - List all trade batches
  */
 router.get("/batches", (req, res) => {
+    res.setHeader("Warning", '299 - "This endpoint is deprecated. Use execution batches instead."');
     getAllTradeBatches((batches) => {
-        res.json(batches);
+        res.json({
+            batches,
+            warning: "This endpoint is deprecated. Use the execution batch flow instead."
+        });
     });
 });
+
 
 /**
  * GET /api/batches/:id - Fetch a specific trade batch
@@ -112,7 +120,11 @@ router.get("/batches/:id", (req, res) => {
             return res.status(404).json({ error: "Batch not found" });
         }
         
-        res.json(batch);
+        res.setHeader("Warning", '299 - "This endpoint is deprecated. Use execution batches instead."');
+        res.json({
+            ...batch,
+            warning: "This endpoint is deprecated. Use the execution batch flow instead."
+        });
     });
 });
 
