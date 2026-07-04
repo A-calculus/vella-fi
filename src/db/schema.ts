@@ -1,6 +1,5 @@
 "use strict";
 
-import sqlite3 from "sqlite3";
 import {
     AgentPermission,
     BatchAllocation,
@@ -12,13 +11,88 @@ import {
     MatchedPair
 } from "../models.js";
 
-// Initialize SQLite database with file-based persistence
-const db = new sqlite3.Database("./valhalla_ledger.db", (err) => {
+interface RunResult {
+    lastID: number;
+    changes: number;
+}
+
+class DatabaseWrapper {
+    private innerDb: any = null;
+    private isReady = false;
+    private queue: Array<{ method: string; args: any[] }> = [];
+
+    constructor(filename: string, callback?: (err: Error | null) => void) {
+        let driver: any;
+        let isWasm = false;
+        
+        try {
+            driver = require("sqlite3");
+        } catch (e) {
+            console.warn("Native sqlite3 loading failed (possibly due to GLIBC mismatch on Vercel). Falling back to sql.js-as-sqlite3 WASM driver.");
+            driver = require("sql.js-as-sqlite3");
+            isWasm = true;
+        }
+
+        const dbPath = (isWasm || process.env.VERCEL) ? ":memory:" : filename;
+
+        this.innerDb = new driver.Database(dbPath, (err: any) => {
+            if (err) {
+                console.error("Error opening database:", err);
+                if (callback) callback(err);
+                return;
+            }
+            console.log(`Connected to SQLite database (${isWasm ? "WASM in-memory" : "Native file-backed"})`);
+            this.isReady = true;
+            
+            const currentQueue = [...this.queue];
+            this.queue = [];
+            for (const item of currentQueue) {
+                this.innerDb[item.method](...item.args);
+            }
+
+            if (callback) callback(null);
+        });
+    }
+
+    public exec(sql: string, callback?: (err: Error | null) => void) {
+        if (this.isReady) {
+            this.innerDb.exec(sql, callback);
+        } else {
+            this.queue.push({ method: "exec", args: [sql, callback] });
+        }
+    }
+
+    public run(sql: string, params: any, callback?: (this: any, err: Error | null) => void) {
+        if (this.isReady) {
+            this.innerDb.run(sql, params, callback);
+        } else {
+            this.queue.push({ method: "run", args: [sql, params, callback] });
+        }
+    }
+
+    public all(sql: string, params: any, callback?: (err: Error | null, rows: any[]) => void) {
+        if (this.isReady) {
+            this.innerDb.all(sql, params, callback);
+        } else {
+            this.queue.push({ method: "all", args: [sql, params, callback] });
+        }
+    }
+
+    public get(sql: string, params: any, callback?: (err: Error | null, row: any) => void) {
+        if (this.isReady) {
+            this.innerDb.get(sql, params, callback);
+        } else {
+            this.queue.push({ method: "get", args: [sql, params, callback] });
+        }
+    }
+}
+
+// Initialize SQLite database with file-based persistence or WASM fallback
+const db = new DatabaseWrapper("./valhalla_ledger.db", (err) => {
     if (err) {
         console.error("Error opening database:", err);
         throw err;
     }
-    console.log("Connected to SQLite database");
 });
 
 export function initializeDatabase() {
@@ -190,7 +264,7 @@ export function insertTradeOrder(order: TradeOrder, batchId?: number, callback?:
         `INSERT INTO trade_orders (symbol, price, size, side, trader_pubkey, timestamp, batch_id)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [order.symbol, order.price, order.size, order.side, order.trader_pubkey, order.timestamp, batchId],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error inserting trade order:", err);
                 return;
@@ -204,7 +278,7 @@ export function createTradeBatch(callback: (id: number) => void): void {
     db.run(
         `INSERT INTO trade_batches (status, created_at) VALUES ('pending', datetime('now'))`,
         [],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error creating trade batch:", err);
                 return;
@@ -218,7 +292,7 @@ export function updateTradeBatchStatus(batchId: number, status: string, callback
     db.run(
         `UPDATE trade_batches SET status = ? WHERE id = ?`,
         [status, batchId],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (callback) callback(err);
         }
     );
@@ -230,7 +304,7 @@ export function insertMatchedPair(batchId: number, pair: MatchedPair, callback?:
          (batch_id, buy_order_id, sell_order_id, matched_price, matched_size, pnl)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [batchId, pair.buyOrder.id, pair.sellOrder.id, pair.matchedPrice, pair.matchedSize, pair.pnl],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error inserting matched pair:", err);
                 return;
@@ -243,7 +317,7 @@ export function insertMatchedPair(batchId: number, pair: MatchedPair, callback?:
                      total_volume = total_volume + (? * ?)
                  WHERE id = ?`,
                 [pair.matchedPrice, pair.matchedSize, batchId],
-                function(this: sqlite3.RunResult, updateErr: Error | null) {
+                function(this: RunResult, updateErr: Error | null) {
                     if (updateErr) {
                         console.error("Error updating batch statistics:", updateErr);
                     }
@@ -403,7 +477,7 @@ export function createAgent(name: string, parameters: any, callback: (id: number
         `INSERT INTO agents (name, status, parameters, created_at, updated_at)
          VALUES (?, 'active', ?, datetime('now'), datetime('now'))`,
         [name, JSON.stringify(parameters)],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error creating agent:", err);
                 return;
@@ -418,7 +492,7 @@ export function logAgentEvent(agentId: number, eventType: string, eventData: any
         `INSERT INTO agent_logs (agent_id, event_type, event_data, timestamp)
          VALUES (?, ?, ?, datetime('now'))`,
         [agentId, eventType, JSON.stringify(eventData)],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (callback) callback(err);
         }
     );
@@ -535,7 +609,7 @@ export function insertTradeIntent(intent: TradeIntent, callback: (id: number) =>
             intent.createdAt,
             intent.blindingFactor ?? null
         ],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error inserting trade intent:", err);
                 return;
@@ -603,7 +677,7 @@ export function createExecutionBatch(batch: ExecutionBatch, intents: TradeIntent
             batch.commitmentRoot,
             batch.quoteLockedUntil ?? null
         ],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error creating execution batch:", err);
                 return;
@@ -679,7 +753,7 @@ export function insertLiquiditySnapshot(snapshot: LiquiditySnapshot, callback?: 
             snapshot.routeHops ?? null,
             snapshot.observedAt
         ],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error inserting liquidity snapshot:", err);
                 return;
@@ -767,7 +841,7 @@ export function insertBatchAllocation(allocation: BatchAllocation, callback?: (i
             allocation.allocationBps,
             allocation.proofLeaf
         ],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error inserting batch allocation:", err);
                 return;
@@ -825,7 +899,7 @@ export function createAgentPermission(permission: AgentPermission, callback: (id
             permission.status,
             permission.createdAt
         ],
-        function(this: sqlite3.RunResult, err: Error | null) {
+        function(this: RunResult, err: Error | null) {
             if (err) {
                 console.error("Error creating agent permission:", err);
                 return;
